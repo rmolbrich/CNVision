@@ -29,12 +29,17 @@ profile_page <- tabPanel("Profiles",
                            uiOutput("ui_select_range"),
                            #uiOutput("ui_select_chrom"),
                            tweaks,
-                           fluidRow(column(width = 5, uiOutput("ui_select_chrom")))
+                           fluidRow(column(width = 5, uiOutput("ui_select_chrom"))),
+                           width = 3
                        ),
 
                        mainPanel(
                            tabsetPanel(type = "tabs",
                                        #tabPanel("Test", plotOutput("plot")),
+                                       tabPanel("Color Plot",
+                                                plotOutput("cnvplot__color_rect",
+                                                           width = "100%",
+                                                           height = "700px")),
                                        tabPanel("Plot", plotOutput("cnvplot_rect")),
                                        tabPanel("Table", DTOutput("cnvtable")))
                        )

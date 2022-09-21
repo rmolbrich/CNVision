@@ -4,7 +4,7 @@
 #'
 #'@param cnv.table table object of cnv-data
 #'@param min.range minimal range on chromosome
-#'@param ax.range maximal range on chromosome
+#'@param max.range maximal range on chromosome
 #'
 #'@return cnv.table reduced to selected range
 filterRange <- function(cnv.table, min.range, max.range) {
@@ -24,7 +24,7 @@ filterRange <- function(cnv.table, min.range, max.range) {
 #' @param chrom.sizes table with chromosome lengths of chosen reference
 #'
 #' @return data_storage named list object containing cnv-tables
-importData <- function(input_files, chrom.sizes) {
+importData <- function(input_files, chrom.sizes, ratio.column = "ratio") {
     data_storage <- NULL
     for( f.idx in input_files ) {
 
@@ -36,9 +36,12 @@ importData <- function(input_files, chrom.sizes) {
                                                               "chrX","chrY"))) %>%
             dplyr::arrange(., chrom) %>%
             # create additional column with ratios rescaled to I=[-1,1]
-            dplyr::mutate(., scaled.ratio = setInterval(ratio,output.range = c(-1,1),input.midvalue = 1)) %>%
-            dplyr::mutate(., log2.ratio = log2(ratio)) %>%
-            dplyr::mutate(., log10.ratio = log10(ratio)) %>%
+            dplyr::mutate(., scaled.ratio = setInterval(get(ratio.column),output.range = c(-1,1),input.midvalue = 1)) %>%
+            dplyr::mutate(., log2.ratio = log2(get(ratio.column))) %>%
+            dplyr::mutate(., log10.ratio = log10(get(ratio.column))) %>%
+            dplyr::mutate(., color.ratio = factor(ifelse(get(ratio.column) < 1, "loss","gain"), levels = c("loss","gain"))) %>%
+            dplyr::mutate(., loss.ratio = ifelse(log10.ratio < 0, log10.ratio, 0)) %>%
+            dplyr::mutate(., gain.ratio = ifelse(log10.ratio >= 0, log10.ratio, 0)) %>%
             dplyr::mutate(., sID = unlist(strsplit(f.idx, "_", fixed=TRUE))[1]) %>%
             dplyr::left_join(., chrom.sizes, by = "chrom")
     }
@@ -47,7 +50,7 @@ importData <- function(input_files, chrom.sizes) {
 
 }
 
-
+factor(ifelse(cnv_data$ratio < 1, "loss","gain"), levels = c("loss","gain"))
 
 #' Scale to user-defined range
 #'
@@ -92,11 +95,11 @@ setInterval <- function(input.vec, output.range = c(-1,1), input.midvalue = NULL
 #' @param cnv_data Output of SMURFSeq protocol but pre-processed (ToDo!)
 #' @param p.type Select between Segment and Bar-plot with 'seg' or 'rect'
 #' @param v.type Select value column in 'cnv_data' by name. Defaults to 'ratio'
-plotCNV <- function(cnv_data, p.type = "rect", v.type = "ratio", c.min, c.max) {
+plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.max) {
 
     if(missing(c.min) || missing(c.max)) {
         c.min <- 0
-        c.max <- cnv_data$clength
+        c.max <- max(cnv_data$clength)
     }
 
     if( p.type == 'rect' ) {
@@ -110,7 +113,7 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "ratio", c.min, c.max) {
                          color="black", linetype = "dashed", size = 0.2,
                          alpha = 0.5) +
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
-            facet_wrap(facets=vars(chrom), nrow=2, scales='free_x') +
+            facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
             theme_cnv() +
             labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
                  name="Covariate")
@@ -128,20 +131,34 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "ratio", c.min, c.max) {
                          alpha = 0.5) +
             ## split by chromosome to produce panels
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
-            facet_wrap(facets=vars(chrom), nrow=2, scales='free_x') +
+            facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
             theme_cnv() +
             labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
                  name="Covariate")
 
-    } else {
+    } else if( p.type == 'rect_color' ) {
         # Fancy way of doing jack.
-        p.obj <- NULL
+        p.obj <- ggplot(cnv_data, aes(color=color.ratio)) +
+            # GAIN/LOSS
+            geom_rect(aes(xmin = chrompos, xmax = chromendpos,
+                          ymin = 0, ymax = get(v.type), alpha = 0.25),
+                       fill="white", size=0.1, data=cnv_data) +
+            #scale_x_continuous(breaks = round(seq(c.min, c.max, by = c.max/2),1)) +
+            ## plot chromosome lengths to get panel widths right
+            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
+                         color="black", linetype = "dashed", size = 0.2,
+                         alpha = 0.5) +
+            #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
+            facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
+            theme_cnv() + scale_color_manual(values=c( "#3883c2","#660000", "#56B4E9")) +
+            labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
+                 name="Covariate")
     }
-
     return(p.obj)
-
 }
 
+
+cnv_data$bin.state <- factor(ifelse(cnv_data$ratio < 1, "loss","gain"), levels = c("loss","gain"))
 
 #' CNV theme for ggplot2 output.
 #'
@@ -158,12 +175,12 @@ theme_cnv <- function(legend_position = 'none', base_size = 14) {
     ggplot2::theme_bw() +
         ggplot2::theme(axis.title.x=ggplot2::element_blank(),
                        axis.title.y=ggplot2::element_blank(),
-                       axis.text.x=ggplot2::element_blank(),
-                       axis.ticks.x=ggplot2::element_blank(),
+                       #axis.text.x=ggplot2::element_blank(),
+                       #axis.ticks.x=ggplot2::element_blank(),
                        legend.position=eval(legend_position),
-                       panel.background = element_rect(fill='transparent'), #transparent panel bg
-                       plot.background = element_rect(fill='transparent',
-                                                      color=NA),
+                       #panel.background = element_rect(fill='transparent'), #transparent panel bg
+                       #plot.background = element_rect(fill='transparent',
+                        #                              color=NA),
                        #panel.grid.major = element_blank(), #remove major gridlines
                        #panel.grid.minor = element_blank(), #remove minor gridlines
                        rect = element_rect(fill = "transparent"),

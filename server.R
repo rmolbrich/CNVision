@@ -23,7 +23,7 @@ chrom.sizes <- chrom.sizes[1:24,] %>%
 ## load all the files in cnv_profiles folder
 input_files <- list.files(path = "data/cnv_profiles/", pattern = ".data.txt")
 ## import the data
-data_storage <- importData(input_files, chrom.sizes)
+data_storage <- importData(input_files, chrom.sizes, "ratio")
 
 ## Prepare vector of sample-IDs for selection menu
 samples <- names(data_storage)
@@ -126,17 +126,34 @@ server <- function(input, output) {
 
         if( length(c.idx) == 1 ) {
             cnv_data <- filterRange(cnv_data, input$dynamic[1], input$dynamic[2])
-
             plotCNV(cnv_data, p.type = 'rect', v.type = eval(input$select_scale),
                     c.min = input$dynamic[1], c.max = input$dynamic[2])
-
         } else {
-
             plotCNV(cnv_data, p.type = 'rect', v.type = eval(input$select_scale))
         }
-
-
     })
+
+    output$cnvplot__color_rect <- renderPlot({
+
+        if( input$select_chrom %in% "all" ) {
+            c.idx <- chromosomes[-1]
+        } else {
+            c.idx <- input$select_chrom
+        }
+
+        ## make sure that selected range works
+        cnv_data <- data_storage[eval(input$select_sample)] %>%
+            purrr::reduce(merge, all=TRUE) %>%
+            filter(chrom %in% c.idx)
+
+        if( length(c.idx) == 1 ) {
+            cnv_data <- filterRange(cnv_data, input$dynamic[1], input$dynamic[2])
+            plotCNV(cnv_data, p.type = 'rect_color', v.type = eval(input$select_scale),
+                    c.min = input$dynamic[1], c.max = input$dynamic[2])
+        } else {
+            plotCNV(cnv_data, p.type = 'rect_color', v.type = eval(input$select_scale))
+        }
+    }, bg = "white")
 
 
     #### DEVELOPMENT CORNER ####
