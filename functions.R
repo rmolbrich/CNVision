@@ -13,6 +13,22 @@ filterRange <- function(cnv.table, min.range, max.range) {
 }
 
 
+
+#' Compute moving average of a value
+#'
+#'@param input.vec Measurements to average
+#'@param window.size Filter size for trailing average
+#'
+#'@return Vector of averages over input, same size as input vector
+movingAverage <- function(input.vec, window.size = 20) {
+
+    avg.vec <- stats::filter(input.vec, rep(1 / window.size, window.size),
+                             sides = 1, circular = TRUE)
+
+    return(avg.vec)
+}
+
+
 #' Import cnv-profile tables
 #'
 #' For a list of cnv-profiles tables the function will import them into a list
@@ -36,21 +52,20 @@ importData <- function(input_files, chrom.sizes, ratio.column = "ratio") {
                                                               "chrX","chrY"))) %>%
             dplyr::arrange(., chrom) %>%
             # create additional column with ratios rescaled to I=[-1,1]
+            dplyr::mutate(., sID = unlist(strsplit(f.idx, "_", fixed=TRUE))[1]) %>%
             dplyr::mutate(., scaled.ratio = setInterval(get(ratio.column),output.range = c(-1,1),input.midvalue = 1)) %>%
             dplyr::mutate(., log2.ratio = log2(get(ratio.column))) %>%
             dplyr::mutate(., log10.ratio = log10(get(ratio.column))) %>%
             dplyr::mutate(., color.ratio = factor(ifelse(get(ratio.column) < 1, "loss","gain"), levels = c("loss","gain"))) %>%
+            dplyr::mutate(., movAvg = unlist(aggregate(log10.ratio ~ chrom + sID, data=., movingAverage)$log10.ratio)) %>%
             dplyr::mutate(., loss.ratio = ifelse(log10.ratio < 0, log10.ratio, 0)) %>%
             dplyr::mutate(., gain.ratio = ifelse(log10.ratio >= 0, log10.ratio, 0)) %>%
-            dplyr::mutate(., sID = unlist(strsplit(f.idx, "_", fixed=TRUE))[1]) %>%
             dplyr::left_join(., chrom.sizes, by = "chrom")
     }
 
     return(data_storage)
 
 }
-
-factor(ifelse(cnv_data$ratio < 1, "loss","gain"), levels = c("loss","gain"))
 
 #' Scale to user-defined range
 #'
@@ -97,6 +112,8 @@ setInterval <- function(input.vec, output.range = c(-1,1), input.midvalue = NULL
 #' @param v.type Select value column in 'cnv_data' by name. Defaults to 'ratio'
 plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.max) {
 
+    copal <- pals::tableau20(20)[c(1,3,5,7,9,11,13,15,17,19)]
+
     if(missing(c.min) || missing(c.max)) {
         c.min <- 0
         c.max <- max(cnv_data$clength)
@@ -104,9 +121,9 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
 
     if( p.type == 'rect' ) {
 
-        p.obj <- ggplot(cnv_data, aes(ymin = 0)) +
+        p.obj <- ggplot(cnv_data, aes(ymin = 0,color=sID)) +
             geom_rect(aes(xmin = chrompos, xmax = chromendpos,
-                          ymax = get(v.type), colour = sID, fill = sID,
+                          ymax = get(v.type), fill = sID,
                           group = sID, alpha = 0.25)) +
             ## plot chromosome lengths to get panel widths right
             geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
@@ -115,17 +132,26 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
             facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
             theme_cnv() +
+            scale_color_manual(values=copal) +
             labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
                  name="Covariate")
 
     } else if( p.type == 'seg' ) {
 
-        p.obj <- ggplot(cnv_data, aes(ymin = -1)) +
+        line.pos <- round(cnv_data$chromendpos -
+                              ((cnv_data$chromendpos - cnv_data$chrompos) / 2))
+
+        p.obj <- ggplot(cnv_data, aes(ymin = 0,color=color.ratio)) +
             ## plot the bin values
-            geom_segment(aes(x = chrompos, y = get(v.type), xend = chromendpos,
-                             yend = get(v.type), colour = "segment",
-                             fill = sID, group = sID, alpha = 0.25)) +
-            ## plot chromosome lengths to get panel widths right
+            geom_point(aes(x = chrompos, y = get(v.type), xend = chromendpos,
+                             yend = get(v.type),
+                             fill = sID, group = sID, alpha = 0.25),size=1) +
+            # geom_segment(aes(x = chrompos, y = get(v.type), xend = chromendpos,
+            #                  yend = get(v.type),
+            #                  fill = sID, group = sID, alpha = 0.25),size=1) +
+            # draw moving average
+            geom_path(aes(x = line.pos, y = movAvg, group=1)) +
+            ## plot chromosome (range) lengths to get panel widths right
             geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
                          color="black", linetype = "dashed", size = 0.2,
                          alpha = 0.5) +
@@ -133,16 +159,17 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
             facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
             theme_cnv() +
+            scale_color_manual(values=copal) +
             labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
                  name="Covariate")
 
     } else if( p.type == 'rect_color' ) {
         # Fancy way of doing jack.
-        p.obj <- ggplot(cnv_data, aes(color=color.ratio)) +
+        p.obj <- ggplot(cnv_data, aes(ymin = 0,color=color.ratio)) +
             # GAIN/LOSS
-            geom_rect(aes(xmin = chrompos, xmax = chromendpos,
-                          ymin = 0, ymax = get(v.type), alpha = 0.25),
-                       fill="white", size=0.1, data=cnv_data) +
+            geom_rect(data=cnv_data, aes(xmin = chrompos, xmax = chromendpos,
+                          ymax = get(v.type), alpha = 0.25),
+                       fill="white", size=0.1) +
             #scale_x_continuous(breaks = round(seq(c.min, c.max, by = c.max/2),1)) +
             ## plot chromosome lengths to get panel widths right
             geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
@@ -157,8 +184,6 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
     return(p.obj)
 }
 
-
-cnv_data$bin.state <- factor(ifelse(cnv_data$ratio < 1, "loss","gain"), levels = c("loss","gain"))
 
 #' CNV theme for ggplot2 output.
 #'

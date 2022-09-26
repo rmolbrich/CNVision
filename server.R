@@ -37,6 +37,17 @@ scales <- c("ratio", "scaled.ratio", "log2.ratio", "log10.ratio", "quantile.rati
 
 server <- function(input, output) {
 
+    #### Directory selection logic ####
+
+    shinyDirChoose(input, 'folder', roots=c(wd='.'), filetypes=c('', 'txt'))
+
+    observe({
+        print(input$folder)
+    })
+
+
+    #### Directory selection logic ####
+
     ## INPUTS
     # UI for sample selection
     output$ui_select_sample <- renderUI(
@@ -133,7 +144,8 @@ server <- function(input, output) {
         }
     })
 
-    output$cnvplot__color_rect <- renderPlot({
+
+    output$cnvplot_seg <- renderPlot({
 
         if( input$select_chrom %in% "all" ) {
             c.idx <- chromosomes[-1]
@@ -145,6 +157,31 @@ server <- function(input, output) {
         cnv_data <- data_storage[eval(input$select_sample)] %>%
             purrr::reduce(merge, all=TRUE) %>%
             filter(chrom %in% c.idx)
+
+        if( length(c.idx) == 1 ) {
+            cnv_data <- filterRange(cnv_data, input$dynamic[1], input$dynamic[2])
+            plotCNV(cnv_data, p.type = 'seg', v.type = eval(input$select_scale),
+                    c.min = input$dynamic[1], c.max = input$dynamic[2])
+        } else {
+            plotCNV(cnv_data, p.type = 'seg', v.type = eval(input$select_scale))
+        }
+    })
+
+
+
+    output$cnvplot__color_rect <- renderPlot({
+
+        if( input$select_chrom %in% "all" ) {
+            c.idx <- chromosomes[-1]
+        } else {
+            c.idx <- input$select_chrom
+        }
+
+        ## make sure that selected range works
+        cnv_data <- data_storage[eval(input$select_sample)] %>%
+            purrr::reduce(merge, all=TRUE) %>%
+            filter(chrom %in% c.idx) %>%
+            dplyr::mutate(., sID = factor(sID))
 
         if( length(c.idx) == 1 ) {
             cnv_data <- filterRange(cnv_data, input$dynamic[1], input$dynamic[2])

@@ -2,6 +2,7 @@
 
 ## this contains the app presentation
 library(shinythemes)
+library(shinyFiles)
 library(DT)
 
 # This apparently required to make the column-wise checkboxes possible.
@@ -22,8 +23,16 @@ tweaks <-
 
 ## Set-up main-page
 profile_page <- tabPanel("Profiles",
+                         # titlePanel(
+                         #     # app title/description
+                         #     "muh"
+                         # ),
+                         # shinyUI(bootstrapPage(
+                         #     shinyDirButton('folder', 'Select a folder', 'Please select a folder', FALSE)
+                         # )),
                    sidebarLayout(
                        sidebarPanel(
+                           shinyDirButton('folder', 'Select a folder', 'Please select a folder', FALSE),
                            uiOutput("ui_select_sample"),
                            uiOutput("ui_select_scale"),
                            uiOutput("ui_select_range"),
@@ -36,13 +45,18 @@ profile_page <- tabPanel("Profiles",
                        mainPanel(
                            tabsetPanel(type = "tabs",
                                        #tabPanel("Test", plotOutput("plot")),
-                                       tabPanel("Color Plot",
+                                       tabPanel("Sample Plot",
                                                 plotOutput("cnvplot__color_rect",
                                                            width = "100%",
                                                            height = "700px")),
-                                       tabPanel("Plot", plotOutput("cnvplot_rect")),
-                                       tabPanel("Table", DTOutput("cnvtable")))
-                       )
+                                       tabPanel("Segment Plot", plotOutput("cnvplot_seg",
+                                                                               width = "100%",
+                                                                               height = "700px")),
+                                       tabPanel("Comparative Plot", plotOutput("cnvplot_rect",
+                                                                   width = "100%",
+                                                                   height = "700px")),
+                                       tabPanel("Bin Table", DTOutput("cnvtable")))
+                       ), fluid = FALSE
                    ))
 
 
