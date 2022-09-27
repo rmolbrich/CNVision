@@ -21,9 +21,9 @@ chrom.sizes <- chrom.sizes[1:24,] %>%
     dplyr::arrange(., chrom)
 
 ## load all the files in cnv_profiles folder
-input_files <- list.files(path = "data/cnv_profiles/", pattern = ".data.txt")
+
 ## import the data
-data_storage <- importData(input_files, chrom.sizes, "ratio")
+data_storage <- importData("data/cnv_profiles/", chrom.sizes, file.tag=".data.txt", ratio.column="seg.mean.LOWESS")
 
 ## Prepare vector of sample-IDs for selection menu
 samples <- names(data_storage)
@@ -39,12 +39,11 @@ server <- function(input, output) {
 
     #### Directory selection logic ####
 
-    shinyDirChoose(input, 'folder', roots=c(wd='.'), filetypes=c('', 'txt'))
-
-    observe({
-        print(input$folder)
-    })
-
+    # shinyDirChoose(input, 'folder', roots=c(wd='.'), filetypes=c('', 'txt'))
+    #
+    # observe({
+    #     print(input$folder)
+    # })
 
     #### Directory selection logic ####
 
@@ -58,16 +57,45 @@ server <- function(input, output) {
     )
 
     # UI for chromosome selection
+    # output$ui_select_chrom <- renderUI(
+    #     list(h3("Chromosome selection:"),
+    #          tags$div(align = 'left',
+    #                   class = 'multicol',
+    #                   checkboxGroupInput(inputId  = 'select_chrom',
+    #                                      label    = NULL,
+    #                                      choices  = chromosomes,
+    #                                      selected = chromosomes[1],
+    #                                      inline   = FALSE)))
+    # )
+
+
+
+    # UI for chromosome selection
     output$ui_select_chrom <- renderUI(
-        list(h3("Chromosome selection:"),
-             tags$div(align = 'left',
-                      class = 'multicol',
-                      checkboxGroupInput(inputId  = 'select_chrom',
+        list(strong(p("Chromosome selection:")),
+             tags$div(align = "left",
+                      class = "multicol",
+                      checkboxGroupInput("select_chrom",
                                          label    = NULL,
                                          choices  = chromosomes,
                                          selected = chromosomes[1],
-                                         inline   = FALSE)))
+                                         inline   = FALSE)
+             ))
     )
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     # UI for ratio scale selection
     output$ui_select_scale <- renderUI(

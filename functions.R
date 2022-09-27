@@ -32,19 +32,29 @@ movingAverage <- function(input.vec, window.size = 20) {
 #' Import cnv-profile tables
 #'
 #' For a list of cnv-profiles tables the function will import them into a list
-#' named by the first filename segments separated by an underscore ('_').
+#' named by the first filename segments separated by an underscore ('.').
 #'
 #' Will also perform the re-scaling and transformation operations for now.
 #'
 #' @param input_files filenames located in local data/cnv_profiles folder.
 #' @param chrom.sizes table with chromosome lengths of chosen reference
+#' @param file.tag Tag to filter input files by. Defaults to '.data.'
+#' @param ratio.column For calculations, ... maybe use sth. else
 #'
 #' @return data_storage named list object containing cnv-tables
-importData <- function(input_files, chrom.sizes, ratio.column = "ratio") {
+importData <- function(file.path, chrom.sizes, file.tag = ".data.", ratio.column = "ratio") {
+
+    # - list all files
+    # - split by sID, ref genome and bin size
+    # - import 'data' and 'short' files separately
+    # - format and calculate metrics
+
+    input_files <- list.files(path = eval(file.path), pattern = eval(file.tag))
+
     data_storage <- NULL
     for( f.idx in input_files ) {
 
-        data_storage[[unlist(strsplit(f.idx, "_", fixed=TRUE))[1]]] <- data.table::fread(paste("data/cnv_profiles/", f.idx, sep="")) %>%
+        data_storage[[unlist(strsplit(f.idx, ".", fixed=TRUE))[1]]] <- data.table::fread(paste("data/cnv_profiles/", f.idx, sep="")) %>%
             dplyr::mutate(., chrom = ifelse(chrom == 23, "chrX",
                                             ifelse(chrom == 24, "chrY",
                                                    paste("chr", chrom, sep="")))) %>%
@@ -53,6 +63,8 @@ importData <- function(input_files, chrom.sizes, ratio.column = "ratio") {
             dplyr::arrange(., chrom) %>%
             # create additional column with ratios rescaled to I=[-1,1]
             dplyr::mutate(., sID = unlist(strsplit(f.idx, "_", fixed=TRUE))[1]) %>%
+            dplyr::mutate(., ref = unlist(strsplit(f.idx, "_", fixed=TRUE))[2]) %>%
+            dplyr::mutate(., binSize = unlist(strsplit(f.idx, "_", fixed=TRUE))[3]) %>%
             dplyr::mutate(., scaled.ratio = setInterval(get(ratio.column),output.range = c(-1,1),input.midvalue = 1)) %>%
             dplyr::mutate(., log2.ratio = log2(get(ratio.column))) %>%
             dplyr::mutate(., log10.ratio = log10(get(ratio.column))) %>%
@@ -66,6 +78,7 @@ importData <- function(input_files, chrom.sizes, ratio.column = "ratio") {
     return(data_storage)
 
 }
+
 
 #' Scale to user-defined range
 #'
@@ -116,7 +129,8 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
 
     if(missing(c.min) || missing(c.max)) {
         c.min <- 0
-        c.max <- max(cnv_data$clength)
+        c.max <- cnv_data$clength
+        #c.max <- max(cnv_data$clength)
     }
 
     if( p.type == 'rect' ) {
@@ -126,9 +140,10 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
                           ymax = get(v.type), fill = sID,
                           group = sID, alpha = 0.25)) +
             ## plot chromosome lengths to get panel widths right
-            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
-                         color="black", linetype = "dashed", size = 0.2,
-                         alpha = 0.5) +
+            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0,
+                             group=chrom),
+                         linetype = "dashed", size = 0.2,
+                         alpha = 0.5, colour = "black") +
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
             facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
             theme_cnv() +
@@ -143,18 +158,18 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
 
         p.obj <- ggplot(cnv_data, aes(ymin = 0,color=color.ratio)) +
             ## plot the bin values
-            geom_point(aes(x = chrompos, y = get(v.type), xend = chromendpos,
-                             yend = get(v.type),
+            geom_point(aes(x = chrompos, y = get(v.type),
                              fill = sID, group = sID, alpha = 0.25),size=1) +
             # geom_segment(aes(x = chrompos, y = get(v.type), xend = chromendpos,
             #                  yend = get(v.type),
             #                  fill = sID, group = sID, alpha = 0.25),size=1) +
             # draw moving average
             geom_path(aes(x = line.pos, y = movAvg, group=1)) +
-            ## plot chromosome (range) lengths to get panel widths right
-            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
-                         color="black", linetype = "dashed", size = 0.2,
-                         alpha = 0.5) +
+            ## plot chromosome lengths to get panel widths right
+            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0,
+                             group=chrom),
+                         linetype = "dashed", size = 0.2,
+                         alpha = 0.5, colour = "black") +
             ## split by chromosome to produce panels
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
             facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
@@ -172,12 +187,14 @@ plotCNV <- function(cnv_data, p.type = "rect", v.type = "log10.ratio", c.min, c.
                        fill="white", size=0.1) +
             #scale_x_continuous(breaks = round(seq(c.min, c.max, by = c.max/2),1)) +
             ## plot chromosome lengths to get panel widths right
-            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0),
-                         color="black", linetype = "dashed", size = 0.2,
-                         alpha = 0.5) +
+            geom_segment(aes(x = c.min, y = 0, xend = c.max, yend = 0,
+                             group=chrom),
+                         linetype = "dashed", size = 0.2,
+                         alpha = 0.5, colour = "black") +
             #facet_grid(cols=vars(chrom), scales='free_x', space='free_x') +
             facet_wrap(facets=vars(chrom), nrow=6, ncol=4, scales='free_x') +
-            theme_cnv() + scale_color_manual(values=c( "#3883c2","#660000", "#56B4E9")) +
+            theme_cnv() +
+            scale_color_manual(values=c( "#3883c2","#660000", "#56B4E9")) +
             labs(x="HG38 5K-bins", y="Ratio of bin counts to genomic average",
                  name="Covariate")
     }
@@ -200,7 +217,7 @@ theme_cnv <- function(legend_position = 'none', base_size = 14) {
     ggplot2::theme_bw() +
         ggplot2::theme(axis.title.x=ggplot2::element_blank(),
                        axis.title.y=ggplot2::element_blank(),
-                       #axis.text.x=ggplot2::element_blank(),
+                       axis.text.x=ggplot2::element_blank(),
                        #axis.ticks.x=ggplot2::element_blank(),
                        legend.position=eval(legend_position),
                        #panel.background = element_rect(fill='transparent'), #transparent panel bg
