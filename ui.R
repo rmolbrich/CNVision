@@ -26,12 +26,23 @@ profile_page <- tabPanel("Profiles",
                          #     "muh"
                          # ),
                          # shinyUI(bootstrapPage(
-                         #     shinyDirButton('folder', 'Select a folder', 'Please select a folder', FALSE)
+                         #     shinyDirButton('directory', 'Select a folder', 'Please select a folder', FALSE)
                          # )),
                    sidebarLayout(
                        sidebarPanel(
+
+                           ### DIRECTORY SELECTION ###
+
+                           # shinyDirButton("directory", "Choose a directory" ,
+                           #                title = "Please select a directory:"),
+
+                           verbatimTextOutput("txt_file", placeholder=TRUE),
+
+                           actionButton("do", "Start Import"),
+
+                           ### DIRECTORY SELECTION ###
+
                            width = 3,
-                           #shinyDirButton('folder', 'Select a folder', 'Please select a folder', FALSE),
                            uiOutput("ui_select_sample"),
                            uiOutput("ui_select_scale"),
                            uiOutput("ui_select_range"),
@@ -43,7 +54,7 @@ profile_page <- tabPanel("Profiles",
                        mainPanel(
                            tabsetPanel(type = "tabs",
                                        tabPanel("Sample Plot",
-                                                plotOutput("cnvplot__color_rect",
+                                                plotOutput("cnvplot_color_rect",
                                                            width = "100%",
                                                            height = "700px")),
                                        tabPanel("Segment Plot", plotOutput("cnvplot_seg",

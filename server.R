@@ -5,70 +5,114 @@ library(ggplot2)
 library(dplyr)
 library(purrr)
 library(shinyWidgets)
+library(shinyFiles)
 
 source("functions.R")
 
 
 # LOAD INPUT DATA ---------------------------------------------------------
 
-## load hg38 chromosome
-# load chromosome lengths to get the panel-widths right
-chrom.sizes <- data.table::fread("data/ref_genomes/hg38.chrom.sizes")
-# ToDo: selection of complete chromosomes could be more dynamic
-chrom.sizes <- chrom.sizes[1:24,] %>%
-    dplyr::rename_with(., ~ c("chrom", "clength")) %>%
-    dplyr::mutate(., chrom = factor(chrom, levels = c(paste("chr",1:22,sep=""),"chrX","chrY"))) %>%
-    dplyr::arrange(., chrom)
+## INIT datapath variable with default path
+datapath <<- paste(getwd(), "/data/cnv_profiles", sep="")
 
-## load all the files in cnv_profiles folder
+## load hg19/hg38 chromosome information
+load(file="data/ref_genomes/ref_data.rda")
 
-## import the data
-data_storage <- importData("data/cnv_profiles/", chrom.sizes, file.tag=".data.txt", ratio.column="seg.mean.LOWESS")
 
 ## Prepare vector of sample-IDs for selection menu
-samples <- names(data_storage)
+samples <- NULL  # names(data_storage)
 ## Prepare vector for chromosome selection
-chromosomes <<- c("all", as.character(chrom.sizes$chrom))
+chromosomes <<- c("all", as.character(ref_data[["hg38"]][["sizes"]]$chrom))
 ## Prepare vector for choice of transformations
 scales <- c("ratio", "scaled.ratio", "log2.ratio", "log10.ratio", "quantile.ratio")
 
 
 # SERVER LOGIC ------------------------------------------------------------
 
-server <- function(input, output) {
+server <- function(input, output, session) {
 
-    #### Directory selection logic ####
+    ### DIRECTORY SELECTION ###
+    # get directory structure for executing server (local machine)
+    volumes = getVolumes()
 
-    # shinyDirChoose(input, 'folder', roots=c(wd='.'), filetypes=c('', 'txt'))
-    #
-    # observe({
-    #     print(input$folder)
-    # })
+    # Set-up the UI interface logic
+    shinyDirChoose(
+        input,
+        'directory',
+        root = c(home = '~'),
+        filetypes = c('', 'txt', 'bigWig', "tsv", "csv", "bw")
 
-    #### Directory selection logic ####
+    )
+
+    # make the directory input a reactive variable
+    dir <- reactive(input$directory)
+
+    # DEBUG: output current datapath to check results
+    output$txt_file <- renderText({
+        #parseDirPath(c(home = '~'), dir())
+        datapath
+    })
+
+    # This sets the datapath variable and performs safety check for variable access
+    observeEvent(ignoreNULL = TRUE,
+                 eventExpr = {
+                     input$directory
+                 },
+                 handlerExpr = {
+                     req(is.list(input$directory))
+                     home <- normalizePath("~")
+                     datapath <<-
+                         file.path(home, paste(unlist(dir()$path[-1]), collapse = .Platform$file.sep))
+
+                     ## Just updates the debug output ##
+                     output$txt_file <- renderText({
+                         #parseDirPath(c(home = '~'), dir())
+                         datapath
+                     })
+                     ## Just updates the debug output ##
+                 })
+
+    # This monitors the button that starts the file import
+    observeEvent(ignoreNULL = TRUE,
+                 eventExpr = {
+                     input$do
+                 }, handlerExpr =  {
+                     data_storage <<- importData(datapath, ref_data[["hg38"]][["sizes"]], file.tag=".data.txt", ratio.column="seg.mean.LOWESS")
+
+                     samples <<- names(data_storage)
+                     # ## Prepare vector for chromosome selection
+                     # chromosomes <<- c("all", as.character(chrom.sizes$chrom))
+                     # ## Prepare vector for choice of transformations
+                     # scales <<- c("ratio", "scaled.ratio", "log2.ratio", "log10.ratio", "quantile.ratio")
+                 })
+
+
+
+
+    ### DIRECTORY SELECTION ###
+    loadData <- function() {
+        if (exists("responses")) {
+            responses
+        }
+    }
 
     ## INPUTS
     # UI for sample selection
-    output$ui_select_sample <- renderUI(
-        checkboxGroupInput("select_sample",
-                           label="Sample selection:",
-                           samples,
-                           selected=samples[1])
-    )
+    # This will initialize the list of samples on start and update it when the
+    # import button is clicked
+    observeEvent(ignoreNULL = FALSE,
+                 eventExpr = {
+                     input$do
+                 }, handlerExpr =  {
 
-    # UI for chromosome selection
-    # output$ui_select_chrom <- renderUI(
-    #     list(h3("Chromosome selection:"),
-    #          tags$div(align = 'left',
-    #                   class = 'multicol',
-    #                   checkboxGroupInput(inputId  = 'select_chrom',
-    #                                      label    = NULL,
-    #                                      choices  = chromosomes,
-    #                                      selected = chromosomes[1],
-    #                                      inline   = FALSE)))
-    # )
+                     output$ui_select_sample <- renderUI(
+                         checkboxGroupInput("select_sample",
+                                            label="Sample selection:",
+                                            samples,
+                                            selected=samples[1])
+                     )
 
-
+                 })
 
     # UI for chromosome selection
     output$ui_select_chrom <- renderUI(
@@ -82,20 +126,6 @@ server <- function(input, output) {
                                          inline   = FALSE)
              ))
     )
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
     # UI for ratio scale selection
     output$ui_select_scale <- renderUI(
@@ -111,7 +141,7 @@ server <- function(input, output) {
         # Range can only be selected if no more than a single chromosome is used
         if( length(input$select_chrom) == 1 && input$select_chrom != "all" ) {
 
-            max.range <- chrom.sizes$clength[which(chrom.sizes$chrom %in%
+            max.range <- ref_data[["hg38"]][["sizes"]]$clength[which(ref_data[["hg38"]][["sizes"]]$chrom %in%
                                                        input$select_chrom)]
             # set max range to chrom length to skip further testing later on
             numericRangeInput("dynamic",
@@ -126,8 +156,6 @@ server <- function(input, output) {
         }
     })
 
-
-
     ## OUTPUTS
     # UI for displaying CNV-table
     output$cnvtable <- renderDT({
@@ -140,7 +168,6 @@ server <- function(input, output) {
             datatable(style = "bootstrap", options = list(pageLength = 200))
 
     })
-
 
     # UI for displaying rect-style plot
     # select more than one sample           - check
@@ -196,8 +223,7 @@ server <- function(input, output) {
     })
 
 
-
-    output$cnvplot__color_rect <- renderPlot({
+    output$cnvplot_color_rect <- renderPlot({
 
         if( input$select_chrom %in% "all" ) {
             c.idx <- chromosomes[-1]
@@ -221,16 +247,7 @@ server <- function(input, output) {
     }, bg = "white")
 
 
-    #### DEVELOPMENT CORNER ####
 
-    ## this bit fixes the issue.. whatever the issue is?!
-    # observe({
-    #     if (input$static == "A") {
-    #         values$dyn <- input$dynamic
-    #     } else {
-    #         values$dyn <- NULL
-    #     }
-    # })
 
     # The example output
     output$check <- renderText({
