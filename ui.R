@@ -33,12 +33,15 @@ profile_page <- tabPanel("Profiles",
 
                            ### DIRECTORY SELECTION ###
 
-                           # shinyDirButton("directory", "Choose a directory" ,
-                           #                title = "Please select a directory:"),
+                           shinyDirButton("directory", "Choose a directory" ,
+                                           title = "Please select a directory:"),
 
                            verbatimTextOutput("txt_file", placeholder=TRUE),
 
                            actionButton("do", "Start Import"),
+                           actionButton("save", "Save Data"),
+
+                           #actionButton("plotting", "Execute"),
 
                            ### DIRECTORY SELECTION ###
 
@@ -53,16 +56,19 @@ profile_page <- tabPanel("Profiles",
 
                        mainPanel(
                            tabsetPanel(type = "tabs",
-                                       tabPanel("Sample Plot",
+                                       tabPanel("Fancy Plot",
                                                 plotOutput("cnvplot_color_rect",
                                                            width = "100%",
                                                            height = "700px")),
                                        tabPanel("Segment Plot", plotOutput("cnvplot_seg",
                                                                                width = "100%",
                                                                                height = "700px")),
-                                       tabPanel("Comparative Plot", plotOutput("cnvplot_rect",
+                                       tabPanel("Rect Plot", plotOutput("cnvplot_rect",
                                                                    width = "100%",
                                                                    height = "700px")),
+                                       tabPanel("Dot Plot", plotOutput("cnvplot_point",
+                                                                               width = "100%",
+                                                                               height = "700px")),
                                        tabPanel("Bin Table", DTOutput("cnvtable")))
                        ), fluid = FALSE
                    ))
