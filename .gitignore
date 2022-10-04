@@ -41,6 +41,6 @@ vignettes/*.pdf
 
 # MACOS local files
 .DS_store
-data/cnv_profiles/
-data/saves/
+data/cnv_profiles/*
+data/saves/*
 
