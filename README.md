@@ -3,7 +3,7 @@ R Shiny App for the visualization of SMURFSeq CNV-profiles
 
 ## Scope
 
-This app can display the long-form output produced by the [SMURFSeq](https://github.com/smithlabcode/smurfseq_scripts.git) protocol. 
+This app can display the long-form output produced by the [SMURFSeq](https://github.com/smithlabcode/smurfseq_scripts.git) protocol. An implementation of this pipeline that makes use of [singularity](https://docs.sylabs.io/guides/3.0/user-guide/index.html) and [snakemake](https://snakemake.readthedocs.io/en/stable/#) features can be found [here](https://github.com/rmolbrich/SMURFsnake) as well.
 
 
 ## Functionality
